@@ -7,7 +7,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/': {
-        target: 'http://localhost:4000', // 实际后端地址
+        target: 'http://localhost:3000', // 实际后端地址
         changeOrigin: true,
       }
     }

@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Qwen2API CLI - 管理面板</title>
+<style>
+:root {
+  --bg: #0f1117;
+  --bg2: #161822;
+  --bg3: #1c1f2e;
+  --border: #2a2d3e;
+  --text: #e1e4ed;
+  --text2: #8b8fa3;
+  --primary: #6366f1;
+  --primary-hover: #818cf8;
+  --success: #22c55e;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+  --info: #3b82f6;
+  --radius: 8px;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+/* 登录页 */
+.login-wrap { display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+.login-box { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 48px; width: 400px; text-align: center; }
+.login-box h1 { font-size: 24px; margin-bottom: 8px; }
+.login-box p { color: var(--text2); margin-bottom: 24px; font-size: 14px; }
+.login-box input { width: 100%; padding: 12px 16px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-size: 14px; outline: none; margin-bottom: 16px; }
+.login-box input:focus { border-color: var(--primary); }
+.login-box button { width: 100%; padding: 12px; background: var(--primary); color: #fff; border: none; border-radius: var(--radius); font-size: 15px; cursor: pointer; transition: .2s; }
+.login-box button:hover { background: var(--primary-hover); }
+.login-error { color: var(--danger); font-size: 13px; margin-top: 12px; display: none; }
+
+/* 主布局 */
+.app { display: none; height: 100vh; }
+.sidebar { width: 220px; background: var(--bg2); border-right: 1px solid var(--border); display: flex; flex-direction: column; position: fixed; top: 0; left: 0; bottom: 0; z-index: 10; }
+.sidebar h2 { padding: 20px; font-size: 16px; border-bottom: 1px solid var(--border); color: var(--primary); }
+.sidebar nav { flex: 1; padding: 12px; }
+.sidebar nav a { display: flex; align-items: center; gap: 10px; padding: 10px 12px; color: var(--text2); text-decoration: none; border-radius: var(--radius); font-size: 14px; margin-bottom: 2px; transition: .15s; cursor: pointer; }
+.sidebar nav a:hover { background: var(--bg3); color: var(--text); }
+.sidebar nav a.active { background: var(--primary); color: #fff; }
+.sidebar nav a .icon { width: 20px; text-align: center; }
+.sidebar-footer { padding: 12px; border-top: 1px solid var(--border); }
+.sidebar-footer button { width: 100%; padding: 8px; background: transparent; border: 1px solid var(--border); color: var(--text2); border-radius: var(--radius); cursor: pointer; font-size: 13px; }
+.sidebar-footer button:hover { border-color: var(--danger); color: var(--danger); }
+
+.main { margin-left: 220px; padding: 24px; overflow-y: auto; height: 100vh; }
+.page { display: none; }
+.page.active { display: block; }
+.page-header { margin-bottom: 24px; }
+.page-header h1 { font-size: 22px; margin-bottom: 4px; }
+.page-header p { color: var(--text2); font-size: 14px; }
+
+/* 卡片 */
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
+.card .label { font-size: 12px; color: var(--text2); text-transform: uppercase; letter-spacing: 1px; }
+.card .value { font-size: 28px; font-weight: 700; margin-top: 4px; }
+.card .value.green { color: var(--success); }
+.card .value.red { color: var(--danger); }
+.card .value.blue { color: var(--info); }
+.card .value.yellow { color: var(--warning); }
+
+/* 表格 */
+.table-wrap { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.table-toolbar { padding: 16px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; border-bottom: 1px solid var(--border); }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 10px 16px; text-align: left; font-size: 13px; border-bottom: 1px solid var(--border); }
+th { background: var(--bg3); color: var(--text2); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; }
+tr:hover { background: var(--bg3); }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.badge.green { background: rgba(34,197,94,.15); color: var(--success); }
+.badge.red { background: rgba(239,68,68,.15); color: var(--danger); }
+.badge.yellow { background: rgba(245,158,11,.15); color: var(--warning); }
+
+/* 按钮 */
+.btn { padding: 8px 16px; border: 1px solid var(--border); background: var(--bg3); color: var(--text); border-radius: var(--radius); cursor: pointer; font-size: 13px; transition: .15s; white-space: nowrap; }
+.btn:hover { border-color: var(--primary); color: var(--primary); }
+.btn-primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+.btn-primary:hover { background: var(--primary-hover); }
+.btn-danger { border-color: var(--danger); color: var(--danger); }
+.btn-danger:hover { background: var(--danger); color: #fff; }
+.btn-success { border-color: var(--success); color: var(--success); }
+.btn-success:hover { background: var(--success); color: #fff; }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.btn-group { display: flex; gap: 4px; }
+
+.waf-alert { background: rgba(239,68,68,.1); border: 1px solid var(--danger); border-radius: var(--radius); padding: 16px 20px; margin-bottom: 20px; display: none; }
+.waf-alert.show { display: block; }
+.waf-alert h3 { color: var(--danger); font-size: 15px; margin-bottom: 8px; }
+.waf-alert p { color: var(--text2); font-size: 13px; margin-bottom: 12px; line-height: 1.6; }
+.waf-alert a { color: var(--primary); text-decoration: underline; }
+.waf-alert .waf-actions { display: flex; gap: 8px; align-items: center; }
+
+/* 模态框 */
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 100; justify-content: center; align-items: center; }
+.modal-overlay.show { display: flex; }
+.modal { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 24px; width: 480px; max-width: 90vw; }
+.modal h3 { margin-bottom: 16px; font-size: 18px; }
+.modal label { display: block; font-size: 13px; color: var(--text2); margin-bottom: 6px; }
+.modal input, .modal textarea, .modal select { width: 100%; padding: 10px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-size: 14px; outline: none; margin-bottom: 12px; font-family: inherit; }
+.modal textarea { min-height: 120px; resize: vertical; }
+.modal input:focus, .modal textarea:focus { border-color: var(--primary); }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.modal .hint { font-size: 12px; color: var(--text2); margin-top: -8px; margin-bottom: 12px; }
+
+/* Toast */
+.toast-wrap { position: fixed; top: 20px; right: 20px; z-index: 200; display: flex; flex-direction: column; gap: 8px; }
+.toast { padding: 12px 20px; border-radius: var(--radius); font-size: 13px; color: #fff; animation: slideIn .3s; min-width: 200px; }
+.toast.success { background: var(--success); }
+.toast.error { background: var(--danger); }
+.toast.info { background: var(--info); }
+@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+/* 使用说明 */
+.usage-box { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 20px; }
+.usage-box h3 { font-size: 15px; margin-bottom: 12px; color: var(--primary); }
+.usage-box code { display: block; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 12px 16px; font-family: 'SF Mono', Menlo, monospace; font-size: 13px; color: var(--success); margin: 8px 0; white-space: pre-wrap; word-break: break-all; }
+.usage-box .desc { font-size: 13px; color: var(--text2); margin-bottom: 8px; }
+
+.empty { text-align: center; padding: 40px; color: var(--text2); font-size: 14px; }
+.mono { font-family: 'SF Mono', Menlo, monospace; font-size: 12px; }
+.truncate { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hide-pwd { -webkit-text-security: disc; }
+</style>
+</head>
+<body>
+
+<!-- 登录页 -->
+<div class="login-wrap" id="loginPage">
+  <div class="login-box">
+    <h1>Qwen2API CLI</h1>
+    <p>请输入管理密钥登录</p>
+    <input type="password" id="loginKey" placeholder="输入 Admin Key..." autofocus>
+    <button onclick="doLogin()">登 录</button>
+    <div class="login-error" id="loginError"></div>
+  </div>
+</div>
+
+<!-- 主界面 -->
+<div class="app" id="app">
+  <aside class="sidebar">
+    <h2>Qwen2API CLI</h2>
+    <nav>
+      <a class="active" onclick="switchPage('dashboard')"><span class="icon">&#9632;</span> 仪表盘</a>
+      <a onclick="switchPage('accounts')"><span class="icon">&#9998;</span> 账号管理</a>
+      <a onclick="switchPage('keys')"><span class="icon">&#128273;</span> API Key</a>
+      <a onclick="switchPage('failures')"><span class="icon">&#9888;</span> 失败记录</a>
+      <a onclick="switchPage('usage')"><span class="icon">&#9654;</span> 使用说明</a>
+    </nav>
+    <div class="sidebar-footer">
+      <button onclick="doLogout()">退出登录</button>
+    </div>
+  </aside>
+
+  <div class="main">
+
+    <!-- 仪表盘 -->
+    <div class="page active" id="page-dashboard">
+      <div class="page-header"><h1>仪表盘</h1><p>系统运行状态概览</p></div>
+
+      <div class="waf-alert" id="wafAlert">
+        <h3>&#9888; WAF 验证拦截</h3>
+        <p>CLI 授权接口被阿里云 WAF 拦截，需要手动完成滑动验证来解锁。<br>
+        请点击下方链接在浏览器中打开，完成滑动验证后，再点击「验证完毕，重试初始化」按钮。</p>
+        <p id="wafVerifyUrl"></p>
+        <div class="waf-actions">
+          <button class="btn" onclick="window.open(document.getElementById('wafVerifyUrl').textContent)">打开验证页面</button>
+          <button class="btn btn-primary" onclick="retryCliInit()">验证完毕，重试初始化</button>
+          <span id="wafRetryStatus" style="font-size:13px;color:var(--text2);"></span>
+        </div>
+      </div>
+
+      <div class="table-toolbar" style="margin-bottom:16px;">
+        <button class="btn btn-success" onclick="initAllCli()">一键初始化所有 CLI</button>
+        <button class="btn btn-primary" onclick="initFailedCli()">一键初始化失败 CLI</button>
+        <span id="cliInitStatus" style="font-size:13px;color:var(--text2);margin-left:8px;"></span>
+      </div>
+
+      <div class="cards" id="statCards"></div>
+      <div class="usage-box">
+        <h3>快速调用</h3>
+        <div class="desc">将以下配置填入 OpenAI 兼容客户端即可使用：</div>
+        <code id="usageCode"></code>
+      </div>
+    </div>
+
+    <!-- 账号管理 -->
+    <div class="page" id="page-accounts">
+      <div class="page-header"><h1>账号管理</h1><p>管理 Qwen 账号池</p></div>
+      <div class="table-toolbar">
+        <button class="btn btn-primary" onclick="openAddAccount()">+ 添加账号</button>
+        <button class="btn" onclick="openBatchImport()">批量导入</button>
+        <button class="btn btn-success" onclick="refreshAllTokens()">刷新全部Token</button>
+        <button class="btn" onclick="forceRefreshAll()">强制刷新(含CLI)</button>
+        <button class="btn" onclick="loadAccounts()" style="margin-left:auto;">&#8635; 刷新</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>邮箱</th><th>密码</th><th>Token</th><th>过期时间</th><th>CLI状态</th><th>操作</th></tr></thead>
+          <tbody id="accountTable"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="accountEmpty" style="display:none;">暂无账号，点击上方按钮添加</div>
+    </div>
+
+    <!-- API Key -->
+    <div class="page" id="page-keys">
+      <div class="page-header"><h1>API Key 管理</h1><p>管理调用密钥，支持生成 OpenAI 兼容密钥</p></div>
+      <div class="cards">
+        <div class="card"><div class="label">管理员密钥</div><div class="value mono truncate" id="adminKeyDisplay" title="">-</div></div>
+      </div>
+      <div class="table-toolbar" style="margin-top:16px;">
+        <button class="btn btn-primary" onclick="openAddKey()">+ 生成新 Key</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Key</th><th>角色</th><th>操作</th></tr></thead>
+          <tbody id="keyTable"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 失败记录 -->
+    <div class="page" id="page-failures">
+      <div class="page-header"><h1>失败记录</h1><p>查看和导出请求失败的账号</p></div>
+      <div class="table-toolbar">
+        <button class="btn btn-danger" onclick="clearFailures()">清除全部记录</button>
+        <button class="btn" onclick="exportFailures()">导出失败账号</button>
+        <button class="btn" onclick="loadFailures()" style="margin-left:auto;">&#8635; 刷新</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>邮箱</th><th>原因</th><th>错误码</th><th>时间</th></tr></thead>
+          <tbody id="failureTable"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="failureEmpty" style="display:none;">暂无失败记录</div>
+    </div>
+
+    <!-- 使用说明 -->
+    <div class="page" id="page-usage">
+      <div class="page-header"><h1>使用说明</h1><p>OpenAI 兼容接口配置</p></div>
+      <div class="usage-box">
+        <h3>1. 接口地址</h3>
+        <div class="desc">Base URL 填入以下地址：</div>
+        <code id="baseUrl"></code>
+      </div>
+      <div class="usage-box">
+        <h3>2. API Key</h3>
+        <div class="desc">填入上方 API Key 页面中的任意一个 Key：</div>
+        <code id="apiKeyHint"></code>
+      </div>
+      <div class="usage-box">
+        <h3>3. 模型名称</h3>
+        <div class="desc">可用模型列表：</div>
+        <code>qwen3-coder-plus
+qwen3-coder-flash
+qwen3.5-plus (自动映射为 coder-model)</code>
+      </div>
+      <div class="usage-box">
+        <h3>4. cURL 示例</h3>
+        <code id="curlExample"></code>
+      </div>
+      <div class="usage-box">
+        <h3>5. Python 示例</h3>
+        <code>from openai import OpenAI
+
+client = OpenAI(
+    api_key="你的API Key",
+    base_url="接口地址/cli/v1"
+)
+
+resp = client.chat.completions.create(
+    model="qwen3-coder-plus",
+    messages=[{"role": "user", "content": "你好"}],
+    stream=True
+)
+for chunk in resp:
+    print(chunk.choices[0].delta.content or "", end="")</code>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Toast容器 -->
+<div class="toast-wrap" id="toastWrap"></div>
+
+<!-- 添加账号模态框 -->
+<div class="modal-overlay" id="modalAddAccount">
+  <div class="modal">
+    <h3>添加账号</h3>
+    <label>邮箱</label>
+    <input type="text" id="addEmail" placeholder="example@xxx.com">
+    <label>密码</label>
+    <input type="text" id="addPassword" placeholder="账号密码">
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('modalAddAccount')">取消</button>
+      <button class="btn btn-primary" onclick="submitAddAccount()">添加</button>
+    </div>
+  </div>
+</div>
+
+<!-- 批量导入模态框 -->
+<div class="modal-overlay" id="modalBatchImport">
+  <div class="modal">
+    <h3>批量导入账号</h3>
+    <label>账号列表</label>
+    <textarea id="batchText" placeholder="每行一个账号，格式：邮箱:密码&#10;user1@example.com:password1&#10;user2@example.com:password2"></textarea>
+    <div class="hint">每行一个，格式为 邮箱:密码，系统会自动登录并初始化 CLI 授权</div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('modalBatchImport')">取消</button>
+      <button class="btn btn-primary" onclick="submitBatchImport()">导入</button>
+    </div>
+  </div>
+</div>
+
+<!-- 生成 Key 模态框 -->
+<div class="modal-overlay" id="modalAddKey">
+  <div class="modal">
+    <h3>生成 API Key</h3>
+    <label>Key (留空自动生成)</label>
+    <input type="text" id="newKeyInput" placeholder="sk-xxx (留空自动生成)">
+    <div class="hint">生成的 Key 可用于 OpenAI 兼容客户端调用</div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('modalAddKey')">取消</button>
+      <button class="btn btn-primary" onclick="submitAddKey()">生成</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const BASE = '';
+let adminKey = '';
+let autoKey = '';
+
+function api(path, opts = {}) {
+  return fetch(BASE + path, {
+    ...opts,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + adminKey,
+      ...opts.headers,
+    },
+  }).then(r => r.json());
+}
+
+function toast(msg, type = 'info') {
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.textContent = msg;
+  document.getElementById('toastWrap').appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+function genKey() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let k = 'sk-';
+  for (let i = 0; i < 40; i++) k += chars[Math.floor(Math.random() * chars.length)];
+  return k;
+}
+
+function formatTime(ts) {
+  if (!ts) return '-';
+  const d = new Date(ts * 1000);
+  if (isNaN(d)) return '-';
+  return d.toLocaleString('zh-CN');
+}
+
+function formatTimeMs(ts) {
+  if (!ts) return '-';
+  const d = new Date(ts);
+  if (isNaN(d)) return '-';
+  return d.toLocaleString('zh-CN');
+}
+
+function maskToken(t) {
+  if (!t || t.length < 12) return t || '-';
+  return t.slice(0, 8) + '...' + t.slice(-4);
+}
+
+function copyText(text) {
+  navigator.clipboard.writeText(text).then(() => toast('已复制', 'success'));
+}
+
+// 登录
+async function doLogin() {
+  const key = document.getElementById('loginKey').value.trim();
+  if (!key) return;
+  try {
+    const res = await fetch(BASE + '/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey: key }),
+    }).then(r => r.json());
+    if (res.status === 200) {
+      adminKey = key;
+      localStorage.setItem('adminKey', key);
+      document.getElementById('loginPage').style.display = 'none';
+      document.getElementById('app').style.display = 'flex';
+      loadAll();
+    } else {
+      document.getElementById('loginError').textContent = '密钥错误';
+      document.getElementById('loginError').style.display = 'block';
+    }
+  } catch (e) {
+    document.getElementById('loginError').textContent = '连接失败';
+    document.getElementById('loginError').style.display = 'block';
+  }
+}
+
+function doLogout() {
+  adminKey = '';
+  localStorage.removeItem('adminKey');
+  document.getElementById('loginPage').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('loginKey').value = '';
+}
+
+document.getElementById('loginKey').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+(function init() {
+  const saved = localStorage.getItem('adminKey');
+  if (saved) {
+    adminKey = saved;
+    document.getElementById('loginPage').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+    const page = sessionStorage.getItem('currentPage') || 'dashboard';
+    switchPage(page);
+    loadAll();
+  }
+})();
+
+// 导航
+function switchPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.sidebar nav a').forEach(a => a.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  const navLink = document.querySelector(`.sidebar nav a[onclick="switchPage('${name}')"]`);
+  if (navLink) {
+    navLink.classList.add('active');
+  }
+  sessionStorage.setItem('currentPage', name);
+}
+
+// 加载所有
+function loadAll() {
+  loadDashboard();
+  loadAccounts();
+  loadKeys();
+  loadFailures();
+  updateUsagePage();
+}
+
+// 仪表盘
+async function loadDashboard() {
+  try {
+    const [accRes, failRes, wafRes, statsRes] = await Promise.all([
+      api('/api/getAllAccounts'),
+      api('/api/getFailureRecords'),
+      api('/api/wafStatus'),
+      api('/api/stats'),
+    ]);
+    const accounts = accRes.data || [];
+    const failures = failRes.data || [];
+    const stats = statsRes || { daily_limit: 1000, daily_used: 0, total_calls: 0, limit_reached_count: 0 };
+    const cliReady = accounts.filter(a => a.cli_ready).length;
+    const tokenOk = accounts.filter(a => a.token_ok).length;
+    const cliFailed = accounts.length - cliReady;
+    const now = Date.now() / 1000;
+    const expiringSoon = accounts.filter(a => a.expires > 0 && a.expires - now < 86400).length;
+    const failedEmails = new Set(failures.map(f => f.email));
+    const failedCount = accounts.filter(a => failedEmails.has(a.email)).length;
+
+    document.getElementById('statCards').innerHTML = `
+      <div class="card"><div class="label">总账号</div><div class="value blue">${accounts.length}</div></div>
+      <div class="card"><div class="label">登录正常</div><div class="value green">${tokenOk}</div></div>
+      <div class="card"><div class="label">CLI 就绪</div><div class="value green">${cliReady}</div></div>
+      <div class="card"><div class="label">CLI 未就绪</div><div class="value red">${cliFailed}</div></div>
+      <div class="card"><div class="label">今日调用</div><div class="value blue">${stats.total_calls}</div></div>
+      <div class="card"><div class="label">已达限额</div><div class="value red">${stats.limit_reached_count}</div></div>
+      <div class="card"><div class="label">账号限额</div><div class="value green">1000/天</div></div>
+      <div class="card"><div class="label">失败账号</div><div class="value yellow">${failedCount}</div></div>
+    `;
+
+    const host = location.origin;
+    document.getElementById('usageCode').textContent = `Base URL: ${host}/cli/v1\nModel: qwen3-coder-plus\nAPI Key: ${adminKey}`;
+
+    if (wafRes.waf_blocked) {
+      const alert = document.getElementById('wafAlert');
+      alert.classList.add('show');
+      document.getElementById('wafVerifyUrl').textContent = wafRes.verify_url;
+    } else {
+      document.getElementById('wafAlert').classList.remove('show');
+    }
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+async function retryCliInit() {
+  document.getElementById('wafRetryStatus').textContent = '正在重新初始化，请稍候...';
+  const res = await api('/api/retryCliInit', { method: 'POST' });
+  toast(res.message || '已提交', 'info');
+  setTimeout(async () => {
+    const wafRes = await api('/api/wafStatus');
+    if (!wafRes.waf_blocked) {
+      toast('WAF 验证通过，CLI 初始化成功！', 'success');
+      document.getElementById('wafAlert').classList.remove('show');
+      document.getElementById('wafRetryStatus').textContent = '';
+    } else {
+      toast('WAF 仍然拦截，请确保已完成滑动验证', 'error');
+      document.getElementById('wafRetryStatus').textContent = '仍被拦截，请重试';
+    }
+    loadDashboard();
+    loadAccounts();
+  }, 15000);
+}
+
+async function initAllCli() {
+  if (!confirm('确定初始化所有账号的 CLI 授权？此操作会重新执行 OAuth 流程，耗时约 5-10 分钟。')) return;
+  document.getElementById('cliInitStatus').textContent = '正在初始化所有 CLI，请稍候...';
+  const res = await api('/api/initAllCli', { method: 'POST' });
+  toast(res.message || '已提交', 'info');
+  setTimeout(() => {
+    document.getElementById('cliInitStatus').textContent = '';
+    loadDashboard();
+    loadAccounts();
+  }, 30000);
+}
+
+async function initFailedCli() {
+  if (!confirm('确定只初始化未就绪账号的 CLI 授权？此操作会跳过已就绪的账号。')) return;
+  document.getElementById('cliInitStatus').textContent = '正在初始化失败 CLI，请稍候...';
+  const res = await api('/api/initFailedCli', { method: 'POST' });
+  toast(res.message || '已提交', 'info');
+  setTimeout(() => {
+    document.getElementById('cliInitStatus').textContent = '';
+    loadDashboard();
+    loadAccounts();
+  }, 15000);
+}
+
+// 账号列表
+async function loadAccounts() {
+  try {
+    const res = await api('/api/getAllAccounts');
+    const accounts = res.data || [];
+    const tbody = document.getElementById('accountTable');
+    const empty = document.getElementById('accountEmpty');
+    if (accounts.length === 0) {
+      tbody.innerHTML = '';
+      empty.style.display = 'block';
+      return;
+    }
+    empty.style.display = 'none';
+    const now = Date.now() / 1000;
+    tbody.innerHTML = accounts.map(a => {
+      let expBadge = '';
+      if (a.expires > 0) {
+        const remain = a.expires - now;
+        if (remain < 0) expBadge = '<span class="badge red">已过期</span>';
+        else if (remain < 86400) expBadge = '<span class="badge yellow">即将过期</span>';
+        else expBadge = '<span class="badge green">正常</span>';
+      } else {
+        expBadge = '<span class="badge yellow">未知</span>';
+      }
+      const cliBadge = a.cli_ready
+        ? '<span class="badge green">就绪</span>'
+        : '<span class="badge red">未就绪</span>';
+      return `<tr>
+        <td class="mono">${a.email}</td>
+        <td class="mono hide-pwd">${a.password}</td>
+        <td class="mono truncate" title="${a.token||''}">${maskToken(a.token)}</td>
+        <td>${formatTime(a.expires)} ${expBadge}</td>
+        <td>${cliBadge}</td>
+        <td>
+          <div class="btn-group">
+            <button class="btn btn-sm btn-success" onclick="refreshOneAccount('${a.email}')">刷新</button>
+            <button class="btn btn-sm btn-danger" onclick="deleteAccount('${a.email}')">删除</button>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+  } catch (e) {
+    toast('加载账号失败', 'error');
+  }
+}
+
+async function openAddAccount() { document.getElementById('modalAddAccount').classList.add('show'); document.getElementById('addEmail').value=''; document.getElementById('addPassword').value=''; }
+function openBatchImport() { document.getElementById('modalBatchImport').classList.add('show'); document.getElementById('batchText').value=''; }
+function openAddKey() { document.getElementById('modalAddKey').classList.add('show'); document.getElementById('newKeyInput').value = genKey(); }
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
+async function submitAddAccount() {
+  const email = document.getElementById('addEmail').value.trim();
+  const password = document.getElementById('addPassword').value.trim();
+  if (!email || !password) { toast('邮箱和密码不能为空', 'error'); return; }
+  const res = await api('/api/setAccount', { method: 'POST', body: JSON.stringify({ email, password }) });
+  if (res.email) { toast('账号添加成功，CLI 授权中...', 'success'); closeModal('modalAddAccount'); loadAccounts(); loadDashboard(); }
+  else toast(res.error || '添加失败', 'error');
+}
+
+async function submitBatchImport() {
+  const text = document.getElementById('batchText').value.trim();
+  if (!text) { toast('请输入账号列表', 'error'); return; }
+  const res = await api('/api/setAccounts', { method: 'POST', body: JSON.stringify({ accounts: text }) });
+  toast(res.message || '提交成功', res.message ? 'success' : 'error');
+  closeModal('modalBatchImport');
+  setTimeout(() => { loadAccounts(); loadDashboard(); }, 3000);
+}
+
+async function deleteAccount(email) {
+  if (!confirm('确定删除账号 ' + email + '？')) return;
+  const res = await api('/api/deleteAccount', { method: 'DELETE', body: JSON.stringify({ email }) });
+  if (res.message) { toast('已删除', 'success'); loadAccounts(); loadDashboard(); }
+  else toast(res.error || '删除失败', 'error');
+}
+
+async function refreshOneAccount(email) {
+  toast('正在刷新 ' + email + '...', 'info');
+  const res = await api('/api/refreshAccount', { method: 'POST', body: JSON.stringify({ email }) });
+  if (res.message) { toast('刷新成功，CLI 重新授权中', 'success'); loadAccounts(); loadDashboard(); }
+  else toast(res.error || '刷新失败', 'error');
+}
+
+async function refreshAllTokens() {
+  if (!confirm('确定刷新所有账号的登录状态？此操作后台异步执行。')) return;
+  const res = await api('/api/refreshAllAccounts', { method: 'POST' });
+  toast(res.message || '已提交', 'success');
+  setTimeout(() => { loadAccounts(); loadDashboard(); }, 5000);
+}
+
+async function forceRefreshAll() {
+  if (!confirm('强制刷新所有账号(含CLI授权)？耗时较长，后台执行。')) return;
+  const res = await api('/api/forceRefreshAllAccounts', { method: 'POST' });
+  toast(res.message || '已提交', 'success');
+}
+
+// API Key
+async function loadKeys() {
+  try {
+    const res = await api('/api/getAllAccounts');
+    const accounts = res.data || [];
+    const host = location.origin;
+    document.getElementById('adminKeyDisplay').textContent = adminKey;
+    document.getElementById('adminKeyDisplay').title = adminKey;
+    document.getElementById('adminKeyDisplay').style.cursor = 'pointer';
+    document.getElementById('adminKeyDisplay').onclick = () => copyText(adminKey);
+
+    const keyRes = await api('/api/settings');
+    const keys = keyRes.regularKeys || [];
+    const tbody = document.getElementById('keyTable');
+    let html = `<tr><td class="mono" style="cursor:pointer" onclick="copyText('${adminKey}')">${maskToken(adminKey)}</td><td><span class="badge green">管理员</span></td><td>-</td></tr>`;
+    keys.forEach(k => {
+      html += `<tr><td class="mono" style="cursor:pointer" onclick="copyText('${k}')">${maskToken(k)}</td><td><span class="badge blue">普通</span></td><td><button class="btn btn-sm btn-danger" onclick="deleteKey('${k}')">删除</button></td></tr>`;
+    });
+    tbody.innerHTML = html;
+  } catch (e) {
+    toast('加载 Key 失败', 'error');
+  }
+}
+
+async function submitAddKey() {
+  let key = document.getElementById('newKeyInput').value.trim();
+  if (!key) key = genKey();
+  const res = await api('/api/addRegularKey', { method: 'POST', body: JSON.stringify({ apiKey: key }) });
+  if (res.message) { toast('Key 已添加: ' + key, 'success'); closeModal('modalAddKey'); loadKeys(); }
+  else toast(res.error || '添加失败', 'error');
+}
+
+async function deleteKey(key) {
+  if (!confirm('确定删除 Key: ' + maskToken(key) + '？')) return;
+  const res = await api('/api/deleteRegularKey', { method: 'POST', body: JSON.stringify({ apiKey: key }) });
+  if (res.message) { toast('已删除', 'success'); loadKeys(); }
+  else toast(res.error || '删除失败', 'error');
+}
+
+// 失败记录
+async function loadFailures() {
+  try {
+    const res = await api('/api/getFailureRecords');
+    const records = res.data || [];
+    const tbody = document.getElementById('failureTable');
+    const empty = document.getElementById('failureEmpty');
+    if (records.length === 0) {
+      tbody.innerHTML = '';
+      empty.style.display = 'block';
+      return;
+    }
+    empty.style.display = 'none';
+    tbody.innerHTML = records.map(r => `<tr>
+      <td class="mono">${r.email}</td>
+      <td>${r.reason || '-'}</td>
+      <td class="mono">${r.error_code || '-'}</td>
+      <td>${formatTime(r.timestamp)}</td>
+    </tr>`).join('');
+  } catch (e) {
+    toast('加载失败记录失败', 'error');
+  }
+}
+
+async function clearFailures() {
+  if (!confirm('确定清除所有失败记录？')) return;
+  const res = await api('/api/clearFailureRecords', { method: 'POST' });
+  if (res.status) { toast('已清除', 'success'); loadFailures(); loadDashboard(); }
+}
+
+function exportFailures() {
+  window.open(BASE + '/api/exportFailureAccounts?_t=' + Date.now());
+}
+
+// 使用说明
+function updateUsagePage() {
+  const host = location.origin;
+  document.getElementById('baseUrl').textContent = host + '/cli/v1';
+  document.getElementById('apiKeyHint').textContent = adminKey;
+  document.getElementById('curlExample').textContent =
+`curl ${host}/cli/v1/chat/completions \\
+  -H "Authorization: Bearer ${adminKey}" \\
+  -H "Content-Type: application/json" \\
+  -d '{"model":"qwen3-coder-plus","messages":[{"role":"user","content":"你好"}],"stream":true}'`;
+}
+</script>
+</body>
+</html>

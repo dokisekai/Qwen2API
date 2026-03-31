@@ -53,6 +53,96 @@
         </div>
       </div>
 
+      <!-- 失败账号列表 -->
+      <div class="failed-accounts-section mb-6 px-4" v-if="failedAccounts.length > 0 || disabledAccounts.length > 0">
+        <div class="bg-gradient-to-r from-red-50 via-orange-50/50 to-yellow-50 border border-red-200 rounded-2xl p-6 shadow-lg">
+          <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center space-x-3">
+              <div class="bg-red-100 p-2 rounded-xl">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div>
+                <h3 class="text-xl font-bold text-red-800">失败账号管理</h3>
+                <p class="text-sm text-red-600">异常账号: {{ failedAccounts.length }} 个 | 已禁用: {{ disabledAccounts.length }} 个</p>
+              </div>
+            </div>
+            <div class="flex space-x-2">
+              <button @click="exportFailedAccounts" class="bg-blue-100 hover:bg-blue-200 text-blue-700 px-4 py-2 rounded-xl transition-all duration-300 flex items-center space-x-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                <span>导出</span>
+              </button>
+              <button @click="loadFailedAccounts" class="bg-red-100 hover:bg-red-200 text-red-700 px-4 py-2 rounded-xl transition-all duration-300 flex items-center space-x-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <span>刷新</span>
+              </button>
+            </div>
+          </div>
+          
+          <div class="space-y-3 max-h-96 overflow-y-auto scrollbar-hide">
+            <div v-for="account in failedAccounts" :key="account.email" 
+                 class="bg-white/80 backdrop-blur-sm border rounded-xl p-4 transition-all duration-300 hover:shadow-md"
+                 :class="disabledAccounts.includes(account.email) ? 'border-red-400 bg-red-50/50' : account.isLocked ? 'border-red-300 bg-red-50/50' : 'border-orange-200'">
+              <div class="flex items-start justify-between">
+                <div class="flex-1">
+                  <div class="flex items-center space-x-2 mb-2">
+                    <span class="font-bold text-gray-800">{{ account.email }}</span>
+                    <span v-if="disabledAccounts.includes(account.email)" class="bg-gray-800 text-white px-2 py-0.5 rounded-full text-xs font-semibold">已禁用</span>
+                    <span v-else-if="account.isLocked" class="bg-red-100 text-red-700 px-2 py-0.5 rounded-full text-xs font-semibold">已锁定</span>
+                    <span v-else class="bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full text-xs font-semibold">异常</span>
+                  </div>
+                  <div class="text-sm text-gray-600 space-y-1">
+                    <p>失败次数: <span class="font-semibold" :class="account.isLocked ? 'text-red-600' : 'text-orange-600'">{{ account.failures }}/{{ account.maxFailures }}</span></p>
+                    <p v-if="account.lastUsed">最后使用: {{ formatDate(account.lastUsed) }}</p>
+                  </div>
+                </div>
+                <div class="flex space-x-2">
+                  <button v-if="disabledAccounts.includes(account.email)" 
+                          @click="enableAccount(account.email)"
+                          class="bg-green-100 hover:bg-green-200 text-green-700 px-3 py-1.5 rounded-lg text-sm transition-all duration-300">
+                    解除禁用
+                  </button>
+                  <button v-else
+                          @click="disableAccount(account.email)"
+                          class="bg-red-100 hover:bg-red-200 text-red-700 px-3 py-1.5 rounded-lg text-sm transition-all duration-300">
+                    禁用
+                  </button>
+                </div>
+              </div>
+              
+              <!-- 失败原因历史记录 -->
+              <div v-if="account.failureHistory && account.failureHistory.length > 0" class="mt-3 pt-3 border-t border-gray-200">
+                <h4 class="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">失败记录</h4>
+                <div class="space-y-2">
+                  <div v-for="(record, index) in account.failureHistory" :key="index" 
+                       class="text-xs bg-gray-50 rounded-lg p-2 flex items-center justify-between">
+                    <div class="flex items-center space-x-2">
+                      <span class="text-gray-400">{{ formatDate(record.timestamp) }}</span>
+                      <span class="text-gray-600">{{ record.reason || '未知原因' }}</span>
+                    </div>
+                    <span class="bg-red-100 text-red-600 px-1.5 py-0.5 rounded text-xs font-medium">第{{ record.failureCount }}次</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div v-if="account.isLocked && !disabledAccounts.includes(account.email)" class="mt-3 p-3 bg-red-100/50 border border-red-200 rounded-lg">
+                <div class="flex items-center space-x-2 text-red-700 text-sm">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>该账号已进入冷却期，将在一段时间后自动恢复</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- 分页控制区 -->
       <div class="flex justify-between items-center px-4 mb-4">
         <div class="flex items-center space-x-2">
@@ -342,6 +432,88 @@ const showDeleteAllConfirm = ref(false)
 const isRefreshingAll = ref(false)
 const isForceRefreshingAll = ref(false)
 const refreshingTokens = ref([])
+
+// 失败账号相关
+const failedAccounts = ref([])
+const disabledAccounts = ref([])
+
+// 加载失败账号列表
+const loadFailedAccounts = async () => {
+  try {
+    const response = await axios.get('/api/getFailedAccounts')
+    if (response.data && response.data.data) {
+      failedAccounts.value = response.data.data
+      disabledAccounts.value = response.data.disabledAccounts || []
+    }
+  } catch (error) {
+    console.error('获取失败账号列表失败:', error)
+    failedAccounts.value = []
+    disabledAccounts.value = []
+  }
+}
+
+// 格式化日期
+const formatDate = (timestamp) => {
+  if (!timestamp) return '未知'
+  const date = new Date(timestamp)
+  return date.toLocaleString('zh-CN')
+}
+
+// 禁用账号
+const disableAccount = async (email) => {
+  if (!confirm(`确定要永久禁用账号 ${email} 吗？`)) return
+
+  try {
+    await axios.post('/api/disableAccount', { email })
+    await loadFailedAccounts()
+    showToast(`账号 ${email} 已禁用`)
+  } catch (error) {
+    console.error('禁用账号失败:', error)
+    showToast('禁用账号失败: ' + error.message, 'error')
+  }
+}
+
+// 解除账号禁用
+const enableAccount = async (email) => {
+  if (!confirm(`确定要解除账号 ${email} 的禁用状态吗？`)) return
+
+  try {
+    await axios.post('/api/enableAccount', { email })
+    await loadFailedAccounts()
+    showToast(`账号 ${email} 已解除禁用`)
+  } catch (error) {
+    console.error('解除账号禁用失败:', error)
+    showToast('解除账号禁用失败: ' + error.message, 'error')
+  }
+}
+
+// 导出失败账号
+const exportFailedAccounts = async () => {
+  try {
+    const response = await axios.get('/api/exportFailedAccounts')
+    
+    if (response.data && response.data.data && response.data.data.length > 0) {
+      const content = JSON.stringify(response.data.data, null, 2)
+      const blob = new Blob([content], { type: 'application/json;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `failed_accounts_${new Date().toISOString().slice(0,10)}.json`
+      document.body.appendChild(link)
+      link.click()
+      setTimeout(() => {
+        document.body.removeChild(link)
+        URL.revokeObjectURL(url)
+      }, 100)
+      showToast('导出成功')
+    } else {
+      showToast('没有可导出的失败账号', 'error')
+    }
+  } catch (error) {
+    console.error('导出失败账号失败:', error)
+    showToast('导出失败账号失败: ' + error.message, 'error')
+  }
+}
 
 // Toast 通知
 const toast = ref({
@@ -679,7 +851,26 @@ const exportAccounts = async () => {
 }
 
 onMounted(() => {
-  getTokens()
+  loadData()
+  loadFailedAccounts()
+  // 每30秒自动刷新一次
+  setInterval(() => {
+    loadData()
+    loadFailedAccounts()
+  }, 30000)
+})
+
+// 计算健康度百分比
+const healthPercentage = computed(() => {
+  if (!healthData.value.rotation) return 100
+  const total = healthData.value.rotation.total || 0
+  const available = healthData.value.rotation.available || 0
+  return total > 0 ? Math.round((available / total) * 100) : 100
+})
+
+// 计算需要关注的账号数（失败次数>0但未锁定）
+const warningAccounts = computed(() => {
+  return failedAccounts.value.filter(acc => !acc.isLocked && acc.failures > 0).length
 })
 </script>
 

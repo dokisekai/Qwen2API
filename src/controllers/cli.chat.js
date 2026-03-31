@@ -1,6 +1,7 @@
 const axios = require('axios')
 const { logger } = require('../utils/logger')
 const { getProxyAgent, getCliBaseUrl, applyProxyToAxiosConfig } = require('../utils/proxy-helper')
+const accountManager = require('../utils/account')
 
 const MODEL_REDIRECT = {
     'qwen3.5-plus': 'coder-model',
@@ -129,6 +130,10 @@ const handleCliChatCompletion = async (req, res) => {
         // 检查响应状态
         if (response.status !== 200) {
             logger.error(`CLI请求使用账号[${req.account.email}]转发失败 - 状态码: ${response.status} - 当前请求数: ${req.account.cli_info.request_number}`, 'CLI', '❌')
+            
+            // 记录失败
+            accountManager.accountRotator.recordFailure(req.account.email, `CLI 请求失败 - 状态码: ${response.status}`)
+            
             return res.status(response.status).json({
                 error: {
                     message: `api_error`,
@@ -154,6 +159,10 @@ const handleCliChatCompletion = async (req, res) => {
             // 处理流错误
             response.data.on('error', (streamError) => {
                 logger.error(`CLI请求使用账号[${req.account.email}]流式传输失败 - 当前请求数: ${req.account.cli_info.request_number}`, 'CLI', '❌')
+                
+                // 记录失败
+                accountManager.accountRotator.recordFailure(req.account.email, 'CLI 流式传输失败')
+                
                 if (!res.headersSent) {
                     res.status(500).json({
                         error: {
@@ -177,6 +186,9 @@ const handleCliChatCompletion = async (req, res) => {
         }
     } catch (error) {
         logger.error(`CLI请求使用账号[${req.account.email}]处理异常 - 当前请求数: ${req.account.cli_info.request_number}`, 'CLI', '💥', error.message)
+        
+        // 记录失败
+        accountManager.accountRotator.recordFailure(req.account.email, `CLI 处理异常: ${error.message}`)
 
         // 如果是axios错误，提供更详细的错误信息
         if (error.response) {
@@ -208,6 +220,4 @@ const handleCliChatCompletion = async (req, res) => {
     }
 }
 
-module.exports = {
-    handleCliChatCompletion
-}
+module.exports = { handleCliChatCompletion }

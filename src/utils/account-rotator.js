@@ -10,6 +10,8 @@ class AccountRotator {
     this.currentIndex = 0
     this.lastUsedTimes = new Map() // 记录每个账户的最后使用时间
     this.failureCounts = new Map() // 记录每个账户的失败次数
+    this.failureReasons = new Map() // 记录每个账户的失败原因
+    this.disabledAccounts = new Set() // 永久禁用的账号列表
     this.maxFailures = 3 // 最大失败次数
     this.cooldownPeriod = 5 * 60 * 1000 // 5分钟冷却期
   }
@@ -32,26 +34,52 @@ class AccountRotator {
   }
 
   /**
-   * 获取下一个可用的账户令牌
-   * @returns {string|null} 账户令牌或null
+   * 获取下一个可用账户
+   * @returns {Object|null} 可用账户对象或null
    */
-  getNextToken() {
+  getNextAccount() {
     if (this.accounts.length === 0) {
-      logger.error('没有可用的账户', 'ACCOUNT')
       return null
     }
 
-    const availableAccounts = this._getAvailableAccounts()
-    if (availableAccounts.length === 0) {
-      logger.warn('所有账户都不可用，使用轮询策略', 'ACCOUNT')
-      return this._getTokenByRoundRobin()
+    const totalAccounts = this.accounts.length
+    let attempts = 0
+    let selectedAccount = null
+
+    while (attempts < totalAccounts) {
+      const account = this.accounts[this.currentIndex]
+      const email = account.email
+
+      // 检查账号是否被禁用
+      if (this.isAccountDisabled(email)) {
+        attempts++
+        this.currentIndex = (this.currentIndex + 1) % totalAccounts
+        continue
+      }
+
+      const failures = this.failureCounts.get(email) || 0
+      const lastUsed = this.lastUsedTimes.get(email) || 0
+      const now = Date.now()
+
+      // 检查是否在冷却期
+      if (failures >= this.maxFailures && (now - lastUsed) < this.cooldownPeriod) {
+        attempts++
+        this.currentIndex = (this.currentIndex + 1) % totalAccounts
+        continue
+      }
+
+      // 找到可用账户
+      selectedAccount = account
+      this._recordUsage(email)
+      this.currentIndex = (this.currentIndex + 1) % totalAccounts
+      break
     }
 
-    // 从可用账户中选择最少使用的
-    const selectedAccount = this._selectLeastUsedAccount(availableAccounts)
-    this._recordUsage(selectedAccount.email)
-    
-    return selectedAccount.token
+    if (!selectedAccount) {
+      logger.warn('所有账号都不可用（禁用或冷却中）', 'ACCOUNT')
+    }
+
+    return selectedAccount
   }
 
   /**
@@ -78,10 +106,26 @@ class AccountRotator {
   /**
    * 记录账户使用失败
    * @param {string} email - 邮箱地址
+   * @param {string} reason - 失败原因（可选）
    */
-  recordFailure(email) {
+  recordFailure(email, reason = null) {
     const currentFailures = this.failureCounts.get(email) || 0
     this.failureCounts.set(email, currentFailures + 1)
+    
+    // 记录失败原因
+    if (reason) {
+      const reasons = this.failureReasons.get(email) || []
+      reasons.push({
+        timestamp: Date.now(),
+        reason: reason,
+        failureCount: currentFailures + 1
+      })
+      // 只保留最近10条失败记录
+      if (reasons.length > 10) {
+        reasons.shift()
+      }
+      this.failureReasons.set(email, reasons)
+    }
     
     if (currentFailures + 1 >= this.maxFailures) {
       logger.warn(`账户 ${email} 失败次数达到上限，将进入冷却期`, 'ACCOUNT')
@@ -241,6 +285,93 @@ class AccountRotator {
     this.currentIndex = 0
     this.lastUsedTimes.clear()
     this.failureCounts.clear()
+  }
+
+  /**
+   * 获取所有失败账号列表
+   * @returns {Array} 失败账号列表，包含邮箱和失败次数
+   */
+  getFailedAccounts() {
+    const failedAccounts = []
+    
+    for (const [email, failures] of this.failureCounts.entries()) {
+      if (failures > 0) {
+        // 查找完整的账户信息
+        const account = this.accounts.find(acc => acc.email === email)
+        // 获取失败原因记录
+        const failureHistory = this.failureReasons.get(email) || []
+        
+        failedAccounts.push({
+          email,
+          failures,
+          maxFailures: this.maxFailures,
+          isLocked: failures >= this.maxFailures,
+          lastUsed: this.lastUsedTimes.get(email) || null,
+          failureHistory: failureHistory.slice(-5), // 只返回最近5条记录
+          accountInfo: account ? {
+            expires: account.expires,
+            hasToken: !!account.token
+          } : null
+        })
+      }
+    }
+    
+    // 按失败次数降序排列
+    return failedAccounts.sort((a, b) => b.failures - a.failures)
+  }
+
+  /**
+   * 清除指定账号的失败记录
+   * @param {string} email - 邮箱地址
+   */
+  clearFailureHistory(email) {
+    this.failureCounts.delete(email)
+    this.failureReasons.delete(email)
+    logger.info(`已清除账户 ${email} 的失败记录`, 'ACCOUNT')
+  }
+
+  /**
+   * 清除所有账号的失败记录
+   */
+  clearAllFailureHistory() {
+    this.failureCounts.clear()
+    this.failureReasons.clear()
+    logger.info('已清除所有账户的失败记录', 'ACCOUNT')
+  }
+
+  /**
+   * 永久禁用账号
+   * @param {string} email - 邮箱地址
+   */
+  disableAccount(email) {
+    this.disabledAccounts.add(email)
+    logger.info(`已永久禁用账户 ${email}`, 'ACCOUNT')
+  }
+
+  /**
+   * 解除账号禁用
+   * @param {string} email - 邮箱地址
+   */
+  enableAccount(email) {
+    this.disabledAccounts.delete(email)
+    logger.info(`已解除账户 ${email} 的禁用状态`, 'ACCOUNT')
+  }
+
+  /**
+   * 检查账号是否被禁用
+   * @param {string} email - 邮箱地址
+   * @returns {boolean} 是否被禁用
+   */
+  isAccountDisabled(email) {
+    return this.disabledAccounts.has(email)
+  }
+
+  /**
+   * 获取所有禁用的账号列表
+   * @returns {Array} 禁用账号列表
+   */
+  getDisabledAccounts() {
+    return Array.from(this.disabledAccounts)
   }
 }
 

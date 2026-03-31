@@ -256,4 +256,134 @@ router.post('/forceRefreshAllAccounts', adminKeyVerify, async (req, res) => {
 })
 
 
+/**
+ * GET /getFailedAccounts
+ * 获取失败账号列表
+ *
+ * @returns {Object} 失败账号列表
+ */
+router.get('/getFailedAccounts', adminKeyVerify, async (req, res) => {
+  try {
+    const failedAccounts = accountManager.accountRotator.getFailedAccounts()
+    const disabledAccounts = accountManager.accountRotator.getDisabledAccounts()
+
+    res.json({
+      total: failedAccounts.length,
+      data: failedAccounts,
+      disabledAccounts: disabledAccounts
+    })
+  } catch (error) {
+    logger.error('获取失败账号列表失败', 'ACCOUNT', '', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+/**
+ * POST /disableAccount
+ * 永久禁用账号
+ *
+ * @body {string} email - 邮箱地址
+ * @returns {Object} 操作结果
+ */
+router.post('/disableAccount', adminKeyVerify, async (req, res) => {
+  try {
+    const { email } = req.body
+
+    if (!email) {
+      return res.status(400).json({ error: '邮箱地址不能为空' })
+    }
+
+    accountManager.accountRotator.disableAccount(email)
+    res.json({ success: true, message: `账号 ${email} 已禁用` })
+  } catch (error) {
+    logger.error('禁用账号失败', 'ACCOUNT', '', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+/**
+ * POST /enableAccount
+ * 解除账号禁用
+ *
+ * @body {string} email - 邮箱地址
+ * @returns {Object} 操作结果
+ */
+router.post('/enableAccount', adminKeyVerify, async (req, res) => {
+  try {
+    const { email } = req.body
+
+    if (!email) {
+      return res.status(400).json({ error: '邮箱地址不能为空' })
+    }
+
+    accountManager.accountRotator.enableAccount(email)
+    res.json({ success: true, message: `账号 ${email} 已解除禁用` })
+  } catch (error) {
+    logger.error('解除账号禁用失败', 'ACCOUNT', '', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+/**
+ * GET /exportFailedAccounts
+ * 导出失败账号列表
+ *
+ * @returns {Object} 导出的失败账号列表
+ */
+router.get('/exportFailedAccounts', adminKeyVerify, async (req, res) => {
+  try {
+    const failedAccounts = accountManager.accountRotator.getFailedAccounts()
+
+    // 构建导出数据
+    const exportData = failedAccounts.map(acc => ({
+      邮箱: acc.email,
+      失败次数: acc.failures,
+      最大失败次数: acc.maxFailures,
+      状态: acc.isLocked ? '已锁定' : '异常',
+      最后使用时间: acc.lastUsed ? new Date(acc.lastUsed).toLocaleString('zh-CN') : '未使用',
+      失败记录: acc.failureHistory.map(h => ({
+        时间: new Date(h.timestamp).toLocaleString('zh-CN'),
+        原因: h.reason || '未知',
+        失败次数: h.failureCount
+      }))
+    }))
+
+    res.json({
+      success: true,
+      total: exportData.length,
+      data: exportData
+    })
+  } catch (error) {
+    logger.error('导出失败账号列表失败', 'ACCOUNT', '', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+router.post('/simulateFailedAccounts', adminKeyVerify, async (req, res) => {
+  try {
+    const testAccounts = [
+      { email: 'test1@example.com', failures: 5, reason: '认证失败' },
+      { email: 'test2@example.com', failures: 3, reason: '网络超时' },
+      { email: 'test3@example.com', failures: 2, reason: '429 Too Many Requests' }
+    ]
+
+    testAccounts.forEach(acc => {
+      for (let i = 0; i < acc.failures; i++) {
+        accountManager.accountRotator.recordFailure(acc.email, acc.reason)
+      }
+    })
+
+    const failedAccounts = accountManager.accountRotator.getFailedAccounts()
+
+    res.json({
+      success: true,
+      message: '已模拟 3 个失败账号',
+      data: failedAccounts
+    })
+  } catch (error) {
+    logger.error('模拟失败账号失败', 'ACCOUNT', '', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
 module.exports = router
